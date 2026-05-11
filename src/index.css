@@ -109,3 +109,79 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* --- ESTILOS MODERNOS PARA LOGIN Y REGISTRO --- */
+.auth-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%); 
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: -8px;
+}
+
+.auth-card {
+  background-color: white;
+  padding: 40px 30px;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.auth-card h2 {
+  color: #2d3436;
+  margin-bottom: 20px;
+  font-size: 28px;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 14px;
+  margin-bottom: 15px;
+  border: 1.5px solid #dfe6e9;
+  border-radius: 8px;
+  font-size: 16px;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.auth-input:focus {
+  border-color: #0984e3;
+  box-shadow: 0 0 0 3px rgba(9, 132, 227, 0.2);
+}
+
+.auth-btn {
+  width: 100%;
+  padding: 14px;
+  background-color: #0984e3;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin-top: 10px;
+}
+
+.auth-btn:hover {
+  background-color: #74b9ff;
+}
+
+.auth-link {
+  display: block;
+  margin-top: 20px;
+  color: #636e72;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.auth-link:hover {
+  color: #0984e3;
+  text-decoration: underline;
+}

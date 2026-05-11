@@ -25,38 +25,39 @@ const Login = () => {
     }
   };
 
-  return (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <h2>Iniciar Sesión en Boomerang</h2>
-      
-      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-        <input 
-          type="email" 
-          placeholder="Correo electrónico" 
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input 
-          type="password" 
-          placeholder="Contraseña" 
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        <button type="submit">Entrar</button>
-      </form>
+ return (
+    <div className="auth-container">
+      <div className="auth-card">
+        <h2>Bienvenido a Boomerang</h2>
+        
+        <form onSubmit={handleLogin}>
+          <input
+            type="email"
+            placeholder="Correo electrónico"
+            className="auth-input"
+            value={email} 
+            onChange={(e) => setEmail(e.target.value)} 
+            required
+          />
+          <input
+            type="password"
+            placeholder="Contraseña"
+            className="auth-input"
+            value={password} 
+            onChange={(e) => setPassword(e.target.value)} 
+            required
+          />
+          <button type="submit" className="auth-btn">
+            Iniciar Sesión
+          </button>
+        </form>
 
-      {/* Si hay un error, lo mostramos en rojo */}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-
-<button onClick={() => navigate('/registro')} style={{marginTop: '10px'}}>
-  ¿No tienes cuenta? Regístrate aquí
-</button>
+        <a href="/registro" className="auth-link">
+          ¿No tienes cuenta? Regístrate aquí
+        </a>
+      </div>
     </div>
-    
   );
 };
 
 export default Login;
-
