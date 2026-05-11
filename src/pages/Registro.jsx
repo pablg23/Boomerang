@@ -41,36 +41,38 @@ const Registro = () => {
   };
 
   return (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <h2>Crear Cuenta en Boomerang</h2>
-      <p>Regístrate como estudiante para empezar.</p>
-      
-      <form onSubmit={handleRegistro} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-        <input 
-          type="email" 
-          placeholder="Correo institucional" 
-          onChange={(e) => setEmail(e.target.value)} 
-          required 
-          style={{ padding: '8px', width: '250px' }}
-        />
-        <input 
-          type="password" 
-          placeholder="Contraseña" 
-          onChange={(e) => setPassword(e.target.value)} 
-          required 
-          style={{ padding: '8px', width: '250px' }}
-        />
+    <div className="auth-container">
+      <div className="auth-card">
+        <h2>Crear Cuenta</h2>
         
-        <button type="submit" style={{ padding: '10px 20px', cursor: 'pointer' }}>
-          Crear cuenta
-        </button>
-      </form>
+        {/* Asegúrate de que esta función se llame igual que la que tienes arriba */}
+        <form onSubmit={handleRegistro}> 
+          <input
+            type="email"
+            placeholder="Correo electrónico"
+            className="auth-input"
+            value={email} 
+            onChange={(e) => setEmail(e.target.value)} 
+            required
+          />
+          <input
+            type="password"
+            placeholder="Contraseña"
+            className="auth-input"
+            value={password} 
+            onChange={(e) => setPassword(e.target.value)} 
+            required
+          />
+          
+          <button type="submit" className="auth-btn">
+            Registrarse
+          </button>
+        </form>
 
-      {error && <p style={{ color: 'red', fontWeight: 'bold' }}>{error}</p>}
-      
-      <button onClick={() => navigate('/')} style={{ marginTop: '20px', background: 'none', border: 'none', color: 'blue', textDecoration: 'underline', cursor: 'pointer' }}>
-        ¿Ya tienes cuenta? Inicia sesión
-      </button>
+        <a href="/" className="auth-link">
+          ¿Ya tienes cuenta? Inicia sesión aquí
+        </a>
+      </div>
     </div>
   );
 };
