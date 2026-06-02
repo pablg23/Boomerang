@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase'; 
 import { doc, getDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, increment } from 'firebase/firestore'; 
 import { signOut } from 'firebase/auth';
-
+import logoIcono from '../logo-icono.PNG';
 const Home = () => {
   const [rol, setRol] = useState(null); 
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -646,7 +646,8 @@ const Home = () => {
           {/* Header principal */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #f1f2f6', paddingBottom: '20px', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '32px' }}>🎓</span>
+              {/* AQUÍ ESTÁ EL CAMBIO: src={logoIcono} */}
+              <img src={logoIcono} alt="Boomerang Logo" style={{ height: '40px', width: 'auto', objectFit: 'contain' }} />
               <h1 style={{ margin: 0, fontSize: '26px', fontWeight: 'bold', color: '#2d3436' }}>{titulosConfig[rol].t}</h1>
             </div>
             <button onClick={handleCerrarSesion} style={{ background: '#ff7675', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}>

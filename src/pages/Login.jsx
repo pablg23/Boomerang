@@ -3,6 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase'; 
 
+// IMPORTACIÓN SEGURA: Traemos el logo como un módulo de JavaScript
+import logoIcono from '../logo-icono.png';
+
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,7 +23,6 @@ const Login = () => {
       navigate('/home');
     } catch (err) {
       console.error("Error en login:", err);
-      // Personalizar los mensajes de error de Firebase a español
       if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
         setError('El usuario no existe o el correo es inválido.');
       } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
@@ -39,7 +41,16 @@ const Login = () => {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#f5f6fa', fontFamily: 'sans-serif' }}>
       <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.08)', width: '100%', maxWidth: '400px', textAlign: 'center' }}>
         
-        <h2 style={{ color: '#2d3436', margin: '0 0 10px 0', fontSize: '28px' }}>Boomerang</h2>
+        {/* ENCABEZADO CON TEXTO Y LOGO ALINEADOS */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', margin: '0 0 10px 0' }}>
+          <h2 style={{ color: '#2d3436', margin: 0, fontSize: '28px' }}>Boomerang</h2>
+          <img 
+            src={logoIcono} 
+            alt="Logo Boomerang" 
+            style={{ width: '35px', height: '35px', objectFit: 'contain' }} 
+          />
+        </div>
+
         <p style={{ color: '#636e72', marginBottom: '30px', fontSize: '15px' }}>Inicia sesión para acceder a tu panel.</p>
         
         {error && (
