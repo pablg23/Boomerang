@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase'; 
-
-// IMPORTACIÓN SEGURA: Traemos el logo como un módulo de JavaScript
+import { auth } from '../firebase';
 import logoIcono from '../logo-icono.png';
 
 const Login = () => {
@@ -41,7 +39,7 @@ const Login = () => {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#f5f6fa', fontFamily: 'sans-serif' }}>
       <div style={{ backgroundColor: '#ffffff', padding: '40px', borderRadius: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.08)', width: '100%', maxWidth: '400px', textAlign: 'center' }}>
         
-        {/* ENCABEZADO CON TEXTO Y LOGO ALINEADOS */}
+        {/* ENCABEZADO CON TEXTO Y LOGO ALINEADOS DESDE LA CARPETA SRC */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', margin: '0 0 10px 0' }}>
           <h2 style={{ color: '#2d3436', margin: 0, fontSize: '28px' }}>Boomerang</h2>
           <img 
