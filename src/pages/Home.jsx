@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase'; 
 import { doc, getDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, increment } from 'firebase/firestore'; 
 import { signOut } from 'firebase/auth';
-import logoIcono from '../logo-icono.PNG';
+import logoIcono from '../logo-icono.png';
 const Home = () => {
   const [rol, setRol] = useState(null); 
   const [loadingAuth, setLoadingAuth] = useState(true);
