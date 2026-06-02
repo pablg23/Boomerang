@@ -1,46 +1,87 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore'; 
+import { auth, db } from '../firebase'; 
+import { doc, getDoc, collection, addDoc, updateDoc, deleteDoc, onSnapshot, increment } from 'firebase/firestore'; 
 import { signOut } from 'firebase/auth';
 
 const Home = () => {
   const [rol, setRol] = useState(null); 
+  const [loadingAuth, setLoadingAuth] = useState(true);
   const navigate = useNavigate();
   
-  // --- ESTADOS PARA LA IMPLEMENTACIÓN SIMULADA (IDEAL PARA PRESENTAR) ---
-  const [categoriaActual, setCategoriaActual] = useState('biblioteca');
-  const [inventario, setInventario] = useState([
-    // Biblioteca
-    { id: 1, nombre: "Cien años de soledad - Gabriel García Márquez", categoria: "biblioteca", disponible: true },
-    { id: 2, nombre: "Cálculo de una variable - James Stewart", categoria: "biblioteca", disponible: true },
-    // Bienestar
-    { id: 3, nombre: "Balón de Fútbol Nike N°5", categoria: "bienestar", disponible: true },
-    { id: 4, nombre: "Juego de Mesa: Ajedrez Profesional", categoria: "bienestar", disponible: false },
-    { id: 5, nombre: "Guitarra Acústica Yamaha", categoria: "bienestar", disponible: true },
-    // Laboratorio
-    { id: 6, nombre: "Microscopio Monocular Digital", categoria: "laboratorio", disponible: true },
-    { id: 7, nombre: "Kit de Probetas y Vasos de Precipitado", categoria: "laboratorio", disponible: true },
-  ]);
+  // --- ESTADOS DE DATOS EN TIEMPO REAL ---
+  const [inventario, setInventario] = useState([]);
+  const [solicitudes, setSolicitudes] = useState([]); 
+  const [usuarios, setUsuarios] = useState([]); 
+  
+  // Control de Menús Desplegables (Accordions)
+  const [inventarioMenuAbierto, setInventarioMenuAbierto] = useState(false);
+  const [catPorCategoriaMenuAbierto, setCatPorCategoriaMenuAbierto] = useState(false);
+  const [categoriaMenuAbierto, setCategoriaMenuAbierto] = useState(true);
+  const [usuariosMenuAbierto, setUsuariosMenuAbierto] = useState(false);
+  const [historialAbierto, setHistorialAbierto] = useState(false);
+  
+  // Navegación de categorías del estudiante y efectos Hover
+  const [categoriaActual, setCategoriaActual] = useState('Biblioteca'); 
+  const [categoriaHovered, setCategoriaHovered] = useState(null);
+  
+  // Modal de Fechas para Estudiantes
+  const [modalPrestamo, setModalPrestamo] = useState({ abierto: false, item: null });
+  const [fechaPrestamo, setFechaPrestamo] = useState('');
+  const [fechaEntrega, setFechaEntrega] = useState('');
+  const hoyStr = new Date().toISOString().split('T')[0]; 
+  
+  // Formulario de inventario (Inserción y Edición)
+  const [nombre, setNombre] = useState('');
+  const [area, setArea] = useState('Biblioteca');
+  const [stock, setStock] = useState(1);
+  const [estado, setEstado] = useState('Disponible');
+  const [editandoId, setEditandoId] = useState(null);
 
-  const [solicitudesAdmin, setSolicitudesAdmin] = useState([
-    { id: 101, usuario: "estudiante1@correo.com", objeto: "Cien años de soledad", area: "📚 Biblioteca", estado: "Pendiente" },
-    { id: 102, usuario: "estudiante2@correo.com", objeto: "Balón de Fútbol", area: "⚽ Bienestar", estado: "Pendiente" },
-  ]);
-
+  // --- ESCUCHA ACTIVA EN TIEMPO REAL ---
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+    const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
+      setLoadingAuth(true);
       if (user) {
-        const docRef = doc(db, "usuarios", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setRol(docSnap.data().rol);
+        try {
+          const docRef = doc(db, "usuarios", user.uid);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists() && docSnap.data().rol) {
+            let rolDetectado = docSnap.data().rol.toLowerCase().trim();
+            if (rolDetectado === 'administrador') rolDetectado = 'admin';
+            setRol(rolDetectado);
+          } else {
+            alert("Error: Tu usuario no tiene un rol asignado.");
+          }
+        } catch (error) {
+          console.error("Error al obtener rol:", error);
+        } finally {
+          setLoadingAuth(false);
         }
       } else {
         navigate('/');
       }
     });
-    return () => unsubscribe();
+
+    const unsubInventario = onSnapshot(collection(db, "inventario"), (snapshot) => {
+      setInventario(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+
+    const unsubSolicitudes = onSnapshot(collection(db, "solicitudes"), (snapshot) => {
+      setSolicitudes(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+
+    const unsubUsuarios = onSnapshot(collection(db, "usuarios"), (snapshot) => {
+      setUsuarios(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubInventario();
+      unsubSolicitudes();
+      unsubUsuarios();
+    };
   }, [navigate]);
 
   const handleCerrarSesion = async () => {
@@ -48,137 +89,579 @@ const Home = () => {
     navigate('/');
   };
 
-  // Funciones de interacción para la demo
-  const handlePrestarDevolver = (id) => {
-    setInventario(inventario.map(item => 
-      item.id === id ? { ...item, disponible: !item.disponible } : item
-    ));
+  // --- OPERACIONES DE DATOS Y FLUJOS ---
+  const guardarElemento = async (e) => {
+    e.preventDefault();
+    try {
+      if (editandoId === null) {
+        await addDoc(collection(db, "inventario"), { nombre, area, stock: Number(stock), estado });
+        alert("Elemento agregado con éxito.");
+      } else {
+        await updateDoc(doc(db, "inventario", editandoId), { nombre, area, stock: Number(stock), estado });
+        alert("Elemento actualizado con éxito.");
+        setEditandoId(null);
+      }
+      cancelarEdicion();
+    } catch (error) { console.error(error); }
   };
 
-  const handleAccionAdmin = (id, nuevoEstado) => {
-    setSolicitudesAdmin(solicitudesAdmin.map(sol => 
-      sol.id === id ? { ...sol, estado: nuevoEstado } : sol
-    ));
+  const prepararEdicion = (item) => {
+    setEditandoId(item.id);
+    setNombre(item.nombre);
+    setArea(item.area);
+    setStock(item.stock);
+    setEstado(item.estado);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- VISTAS DE LAS IMPLEMENTACIONES ---
+  const cancelarEdicion = () => {
+    setEditandoId(null);
+    setNombre('');
+    setArea('Biblioteca');
+    setStock(1);
+    setEstado('Disponible');
+  };
 
-  // 1. Interfaz del Estudiante (Catálogo por áreas + Préstamos)
-  const VistaEstudiante = () => (
-    <div>
-      <p style={{ color: '#636e72', marginBottom: '20px' }}>Selecciona el área donde deseas solicitar o devolver un implemento:</p>
-      
-      {/* Selector de Áreas Escalables */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', justifyContent: 'center' }}>
-        <button onClick={() => setCategoriaActual('biblioteca')} style={{ padding: '10px 15px', backgroundColor: categoriaActual === 'biblioteca' ? '#74b9ff' : '#eee', color: categoriaActual === 'biblioteca' ? 'white' : '#333', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>📚 Biblioteca</button>
-        <button onClick={() => setCategoriaActual('bienestar')} style={{ padding: '10px 15px', backgroundColor: categoriaActual === 'bienestar' ? '#a29bfe' : '#eee', color: categoriaActual === 'bienestar' ? 'white' : '#333', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>⚽ Bienestar</button>
-        <button onClick={() => setCategoriaActual('laboratorio')} style={{ padding: '10px 15px', backgroundColor: categoriaActual === 'laboratorio' ? '#55efc4' : '#eee', color: categoriaActual === 'laboratorio' ? 'white' : '#333', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>🧪 Laboratorio Químico</button>
+  const abrirModalPrestamo = (item) => {
+    setModalPrestamo({ abierto: true, item });
+    setFechaPrestamo(hoyStr);
+    setFechaEntrega('');
+  };
+
+  const confirmarPrestamo = async (e) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, "solicitudes"), {
+        usuarioEmail: auth.currentUser.email,
+        objetoId: modalPrestamo.item.id,
+        objetoNombre: modalPrestamo.item.nombre,
+        area: modalPrestamo.item.area,
+        estado: 'Pendiente',
+        fechaPrestamo: fechaPrestamo,
+        fechaEntrega: fechaEntrega
+      });
+      alert(`Solicitud de ${modalPrestamo.item.nombre} enviada con éxito.`);
+      setModalPrestamo({ abierto: false, item: null });
+    } catch (error) { console.error(error); }
+  };
+
+  const cancelarSolicitudEstudiante = async (id) => {
+    if (window.confirm("¿Seguro que deseas cancelar esta solicitud pendiente?")) {
+      try {
+        await deleteDoc(doc(db, "solicitudes", id));
+        alert("Solicitud cancelada con éxito.");
+      } catch (error) { console.error(error); }
+    }
+  };
+
+  const cambiarEstadoSolicitud = async (sol, nuevoEstado) => {
+    try {
+      await updateDoc(doc(db, "solicitudes", sol.id), { estado: nuevoEstado });
+      if (sol.objetoId) {
+        const inventarioRef = doc(db, "inventario", sol.objetoId);
+        if (sol.estado === 'Pendiente' && nuevoEstado === 'Aprobado') {
+          await updateDoc(inventarioRef, { stock: increment(-1) });
+        } else if (sol.estado === 'Aprobado' && nuevoEstado === 'Devuelto') {
+          await updateDoc(inventarioRef, { stock: increment(1) });
+        } else if (sol.estado === 'Aprobado' && nuevoEstado === 'Pendiente') {
+          await updateDoc(inventarioRef, { stock: increment(1) });
+        } else if (sol.estado === 'Devuelto' && nuevoEstado === 'Aprobado') {
+          await updateDoc(inventarioRef, { stock: increment(-1) });
+        }
+      }
+    } catch (error) { console.error(error); }
+  };
+
+  const modificarRolUsuario = async (userId, nuevoRol) => {
+    try {
+      await updateDoc(doc(db, "usuarios", userId), { rol: nuevoRol });
+      alert("Rol de usuario actualizado exitosamente.");
+    } catch (error) { console.error(error); }
+  };
+
+  // --- CONTEO DE MÉTRICAS ---
+  const stats = (() => {
+    const pendientes = solicitudes.filter(s => s.estado === 'Pendiente').length;
+    const activos = solicitudes.filter(s => s.estado === 'Aprobado').length;
+    const vencidos = solicitudes.filter(s => s.estado === 'Aprobado' && s.fechaEntrega && s.fechaEntrega < hoyStr).length;
+    const frecuencias = {};
+    solicitudes.forEach(s => frecuencias[s.objetoNombre] = (frecuencias[s.objetoNombre] || 0) + 1);
+    let masPedido = "Ninguno";
+    let maxConteo = 0;
+    Object.entries(frecuencias).forEach(([n, c]) => {
+      if (c > maxConteo) { maxConteo = c; masPedido = n; }
+    });
+    return { pendientes, activos, vencidos, favorito: maxConteo > 0 ? `${masPedido} (${maxConteo} unds)` : 'Sin registros' };
+  })();
+
+  const tieneAlertasVencidas = solicitudes.some(sol => sol.usuarioEmail === auth.currentUser?.email && sol.estado === 'Aprobado' && sol.fechaEntrega && sol.fechaEntrega < hoyStr);
+
+  // --- ESTILOS COMPARTIDOS ---
+  const inputEstiloClaro = {
+    backgroundColor: '#ffffff',
+    color: '#2d3436',
+    border: '1px solid #ccd1d9',
+    padding: '12px 14px',
+    borderRadius: '8px',
+    outline: 'none',
+    fontSize: '14px',
+    width: '100%',
+    boxSizing: 'border-box',
+    cursor: 'pointer'
+  };
+
+  const selectEstiloClaro = {
+    backgroundColor: '#ffffff',
+    color: '#2d3436',
+    border: '1px solid #ccd1d9',
+    padding: '12px 14px',
+    borderRadius: '8px',
+    outline: 'none',
+    fontSize: '14px',
+    cursor: 'pointer',
+    width: '100%',
+    boxSizing: 'border-box',
+    fontWeight: '500'
+  };
+
+  const cabeceraDesplegableEstilo = {
+    width: '100%',
+    padding: '16px 20px',
+    backgroundColor: '#f1f2f6',
+    color: '#2d3436',
+    border: 'none',
+    borderRadius: '8px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    fontSize: '15px',
+    transition: 'background-color 0.2s'
+  };
+
+  // RECUADRO DE ESTADÍSTICAS EN VIVO
+  const renderPanelEstadisticasJSX = () => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '35px' }}>
+      <div style={{ padding: '20px', backgroundColor: '#fff3cd', border: '1px solid #ffeeba', borderRadius: '12px', color: '#856404' }}>
+        <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>Solicitudes Pendientes</div>
+        <div style={{ fontSize: '26px', fontWeight: 'bold', marginTop: '5px' }}>{stats.pendientes}</div>
       </div>
-
-      {/* Lista de Recursos del Área seleccionada */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {inventario.filter(item => item.categoria === categoriaActual).map(item => (
-          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', border: '1px solid #dfe6e9', borderRadius: '8px', backgroundColor: '#fafafa' }}>
-            <span style={{ fontWeight: '500', color: '#2d3436' }}>{item.nombre}</span>
-            <button 
-              onClick={() => handlePrestarDevolver(item.id)}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: item.disponible ? '#00b894' : '#ff7675',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                fontWeight: 'bold'
-              }}
-            >
-              {item.disponible ? 'Solicitar Préstamo' : 'Devolver Objeto'}
-            </button>
-          </div>
-        ))}
+      <div style={{ padding: '20px', backgroundColor: '#d1ecf1', border: '1px solid #bee5eb', borderRadius: '12px', color: '#0c5460' }}>
+        <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>Préstamos Activos</div>
+        <div style={{ fontSize: '26px', fontWeight: 'bold', marginTop: '5px' }}>{stats.activos}</div>
+      </div>
+      <div style={{ padding: '20px', backgroundColor: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: '12px', color: '#721c24' }}>
+        <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>Retrasos Críticos</div>
+        <div style={{ fontSize: '26px', fontWeight: 'bold', marginTop: '5px' }}>{stats.vencidos}</div>
+      </div>
+      <div style={{ padding: '20px', backgroundColor: '#e2e3e5', border: '1px solid #d6d8db', borderRadius: '12px', color: '#383d41' }}>
+        <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>Más Solicitado</div>
+        <div style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stats.favorito}</div>
       </div>
     </div>
   );
 
-  // 2. Interfaz de Gestión (Admin, Operador, Superusuario)
-  const VistaGestion = ({ tituloRol }) => (
+  // VISTA 1: ESTUDIANTES
+  const vistaEstudianteJSX = (
     <div>
-      <p style={{ color: '#636e72', marginBottom: '20px' }}>Panel de control para la revisión y aprobación de préstamos en todas las sedes.</p>
-      
-      <h4 style={{ textAlign: 'left', color: '#2d3436', marginBottom: '10px' }}>Solicitudes en Tiempo Real:</h4>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+      {tieneAlertasVencidas && (
+        <div style={{ backgroundColor: '#ff7675', color: 'white', padding: '15px', borderRadius: '8px', marginBottom: '25px', fontWeight: 'bold', textAlign: 'center' }}>
+          ⚠️ ALERTA DE RETRASO: Tienes elementos vencidos. Por favor, realiza la entrega en la brevedad posible.
+        </div>
+      )}
+
+      {/* MODAL CON AUTO-DESPLEGADO DE CALENDARIO AL HACER CLIC EN EL INPUT */}
+      {modalPrestamo.abierto && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: '#ffffff', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: '0 0 15px 0', color: '#2d3436' }}>Solicitar: {modalPrestamo.item?.nombre}</h3>
+            <form onSubmit={confirmarPrestamo} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#636e72', fontSize: '13px' }}>Fecha de Préstamo:</label>
+                <input 
+                  type="date" 
+                  value={fechaPrestamo} 
+                  min={hoyStr} 
+                  onChange={(e) => setFechaPrestamo(e.target.value)} 
+                  onClick={(e) => e.target.showPicker?.()} 
+                  required 
+                  style={inputEstiloClaro} 
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#636e72', fontSize: '13px' }}>Fecha de Devolución:</label>
+                <input 
+                  type="date" 
+                  value={fechaEntrega} 
+                  min={fechaPrestamo || hoyStr} 
+                  onChange={(e) => setFechaEntrega(e.target.value)} 
+                  onClick={(e) => e.target.showPicker?.()} 
+                  required 
+                  style={inputEstiloClaro} 
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setModalPrestamo({abierto: false, item: null})} style={{ flex: 1, padding: '12px', backgroundColor: '#e1b12c', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Cancelar</button>
+                <button type="submit" style={{ flex: 1, padding: '12px', backgroundColor: '#00b894', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Confirmar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* LAS TRES CATEGORÍAS GRANDES */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', marginBottom: '35px' }}>
+        {[
+          { id: 'Biblioteca', icon: '📚', color: '#74b9ff', hoverColor: '#e3f2fd' },
+          { id: 'Bienestar', icon: '⚽', color: '#a29bfe', hoverColor: '#f3e5f5' },
+          { id: 'Laboratorio', icon: '🧪', color: '#55efc4', hoverColor: '#e8f5e9' }
+        ].map(cat => {
+          const seleccionado = categoriaActual === cat.id;
+          const enHover = categoriaHovered === cat.id;
+          
+          return (
+            <div 
+              key={cat.id} 
+              onClick={() => setCategoriaActual(cat.id)}
+              onMouseEnter={() => setCategoriaHovered(cat.id)}
+              onMouseLeave={() => setCategoriaHovered(null)}
+              style={{ 
+                padding: '25px', 
+                backgroundColor: seleccionado ? cat.color : (enHover ? cat.hoverColor : '#ffffff'), 
+                color: seleccionado ? 'white' : '#2d3436', 
+                border: seleccionado ? 'none' : '2px solid #f1f2f6', 
+                borderRadius: '14px', 
+                cursor: 'pointer', 
+                textAlign: 'center', 
+                transition: 'all 0.2s ease',
+                boxShadow: seleccionado || enHover ? '0 4px 15px rgba(0,0,0,0.06)' : 'none'
+              }}
+            >
+              <div style={{ fontSize: '36px', marginBottom: '12px' }}>{cat.icon}</div>
+              <div style={{ fontWeight: 'bold', fontSize: '18px' }}>{cat.id}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* MENÚ DESPLEGABLE: RECURSOS DISPONIBLES POR CATEGORÍA */}
+      <div style={{ marginBottom: '25px', border: '1px solid #dfe6e9', borderRadius: '8px', overflow: 'hidden' }}>
+        <button onClick={() => setCategoriaMenuAbierto(!categoriaMenuAbierto)} style={cabeceraDesplegableEstilo}>
+          <span>🔍 Elementos Disponibles en {categoriaActual} (Clic para colapsar)</span>
+          <span>{categoriaMenuAbierto ? '▲' : '▼'}</span>
+        </button>
+        
+        {categoriaMenuAbierto && (
+          <div style={{ padding: '20px', backgroundColor: '#ffffff', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {inventario.filter(item => item.area === categoriaActual).length === 0 ? (
+              <p style={{ color: '#b2bec3', margin: 0, textAlign: 'left' }}>No hay elementos registrados en esta área.</p>
+            ) : (
+              inventario.filter(item => item.area === categoriaActual).map(item => (
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', border: '1px solid #f1f2f6', borderRadius: '10px', backgroundColor: '#ffffff' }}>
+                  <div style={{ textAlign: 'left' }}>
+                    <span style={{ fontWeight: 'bold', color: '#2d3436', display: 'block', fontSize: '16px', marginBottom: '4px' }}>{item.nombre}</span>
+                    <span style={{ fontSize: '13px', color: '#636e72', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: item.stock > 0 ? '#00b894' : '#ff7675' }}></span>
+                      Disponibles: {item.stock} unidades
+                    </span>
+                  </div>
+                  <button onClick={() => abrirModalPrestamo(item)} disabled={item.estado !== 'Disponible' || item.stock <= 0} style={{ padding: '10px 18px', backgroundColor: item.estado === 'Disponible' && item.stock > 0 ? '#00b894' : '#eee', color: item.estado === 'Disponible' && item.stock > 0 ? 'white' : '#b2bec3', border: 'none', borderRadius: '6px', cursor: item.estado === 'Disponible' && item.stock > 0 ? 'pointer' : 'not-allowed', fontWeight: 'bold', fontSize: '13px' }}>
+                    Solicitar Préstamo
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* HISTORIAL DESPLEGABLE ESTUDIANTE */}
+      <div style={{ border: '1px solid #dfe6e9', borderRadius: '8px', overflow: 'hidden' }}>
+        <button onClick={() => setHistorialAbierto(!historialAbierto)} style={cabeceraDesplegableEstilo}>
+          <span>📋 Mi Historial y Estado de Pedidos (Clic para desplegar)</span>
+          <span>{historialAbierto ? '▲' : '▼'}</span>
+        </button>
+        {historialAbierto && (
+          <div style={{ padding: '15px', backgroundColor: '#ffffff', overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #dfe6e9', backgroundColor: '#f8f9fa' }}>
+                  <th style={{ padding: '12px', textAlign: 'left' }}>Recurso</th>
+                  <th style={{ padding: '12px', textAlign: 'left' }}>Fechas</th>
+                  <th style={{ padding: '12px', textAlign: 'left' }}>Estado</th>
+                  <th style={{ padding: '12px', textAlign: 'center' }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {solicitudes.filter(s => s.usuarioEmail === auth.currentUser?.email).map(sol => (
+                  <tr key={sol.id} style={{ borderBottom: '1px solid #f1f2f6' }}>
+                    <td style={{ padding: '12px', fontWeight: 'bold', color: '#0984e3', textAlign: 'left' }}>{sol.objetoNombre}</td>
+                    <td style={{ padding: '12px', color: '#636e72', textAlign: 'left' }}>
+                      <div style={{ fontSize: '11px' }}>Préstamo: {sol.fechaPrestamo}</div>
+                      <div style={{ fontSize: '11px' }}>Devolución: {sol.fechaEntrega}</div>
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'left' }}>
+                      <span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', backgroundColor: sol.estado === 'Pendiente' ? '#fff3cd' : sol.estado === 'Aprobado' ? '#d4edda' : sol.estado === 'Devuelto' ? '#e2e3e5' : '#f8d7da', color: sol.estado === 'Pendiente' ? '#856404' : sol.estado === 'Aprobado' ? '#155724' : sol.estado === 'Devuelto' ? '#383d41' : '#721c24' }}>
+                        {sol.estado}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      {sol.estado === 'Pendiente' ? (
+                        <button onClick={() => cancelarSolicitudEstudiante(sol.id)} style={{ padding: '5px 10px', background: '#ff7675', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Cancelar</button>
+                      ) : <span style={{ color: '#b2bec3', fontSize: '11px' }}>Fijo</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // VISTA 2: OPERATIVA (GESTIÓN DE INVENTARIO Y DEVOLUCIONES)
+  const vistaGestionJSX = (
+    <div>
+      {/* FORMULARIO DE INSERCIÓN / EDICIÓN CLARO */}
+      <div style={{ background: '#ffffff', padding: '25px', borderRadius: '12px', marginBottom: '30px', border: '1px solid #dfe6e9' }}>
+        <h3 style={{ marginTop: 0, color: editandoId ? '#e1b12c' : '#2d3436', marginBottom: '20px', borderBottom: '1px solid #f1f2f6', paddingBottom: '10px', textAlign: 'left' }}>
+          {editandoId ? "📝 Modo Edición Activo" : "➕ Insertar Nuevo Recurso"}
+        </h3>
+        <form onSubmit={guardarElemento} style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: '2 1 200px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: '#636e72', textAlign: 'left' }}>Nombre del Objeto:</label>
+            <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} required style={inputEstiloClaro} placeholder="Ej: Microscopio monocular" />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 150px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: '#636e72', textAlign: 'left' }}>Área de Asignación:</label>
+            <select value={area} onChange={(e) => setArea(e.target.value)} style={selectEstiloClaro}>
+              <option value="Biblioteca">Biblioteca</option>
+              <option value="Bienestar">Bienestar</option>
+              <option value="Laboratorio">Laboratorio</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', width: '90px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: '#636e72', textAlign: 'left' }}>Stock:</label>
+            <input type="number" min="0" value={stock} onChange={(e) => setStock(e.target.value)} required style={inputEstiloClaro} />
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="submit" style={{ padding: '12px 20px', backgroundColor: editandoId ? '#e1b12c' : '#0984e3', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
+              {editandoId ? "Actualizar" : "Guardar Recurso"}
+            </button>
+            {editandoId && (
+              <button type="button" onClick={cancelarEdicion} style={{ padding: '12px 15px', backgroundColor: '#636e72', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
+                Cancelar
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+
+      {/* CONTROL DE SOLICITUDES Y DEVOLUCIONES */}
+      <h3 style={{ color: '#2d3436', borderBottom: '2px solid #f1f2f6', paddingBottom: '10px', textAlign: 'left', fontSize: '18px' }}>Control de Solicitudes y Devoluciones</h3>
+      <div style={{ overflowX: 'auto', marginBottom: '35px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #dfe6e9' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
-            <tr style={{ backgroundColor: '#f1f2f6', borderBottom: '2px solid #dfe6e9' }}>
-              <th style={{ padding: '10px' }}>Estudiante</th>
-              <th style={{ padding: '10px' }}>Objeto</th>
-              <th style={{ padding: '10px' }}>Área</th>
-              <th style={{ padding: '10px' }}>Estado</th>
-              <th style={{ padding: '10px', textAlign: 'center' }}>Acciones</th>
+            <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '1px solid #dfe6e9' }}>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Estudiante</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Objeto / Área</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Fechas Pactadas</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Estado</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Acción de Control</th>
             </tr>
           </thead>
           <tbody>
-            {solicitudesAdmin.map(sol => (
-              <tr key={sol.id} style={{ borderBottom: '1px solid #dfe6e9' }}>
-                <td style={{ padding: '12px 10px' }}>{sol.usuario}</td>
-                <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{sol.objeto}</td>
-                <td style={{ padding: '12px 10px' }}>{sol.area}</td>
-                <td style={{ padding: '12px 10px' }}>
-                  <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', backgroundColor: sol.estado === 'Pendiente' ? '#ffeaa7' : sol.estado === 'Aprobado' ? '#e5faf2' : '#ffebee', color: sol.estado === 'Pendiente' ? '#d6a21e' : sol.estado === 'Aprobado' ? '#00b894' : '#ff7675' }}>
-                    {sol.estado}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 10px', display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                  {sol.estado === 'Pendiente' ? (
-                    <>
-                      <button onClick={() => handleAccionAdmin(sol.id, 'Aprobado')} style={{ padding: '5px 10px', backgroundColor: '#00b894', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Aprobar</button>
-                      <button onClick={() => handleAccionAdmin(sol.id, 'Rechazado')} style={{ padding: '5px 10px', backgroundColor: '#ff7675', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Rechazar</button>
-                    </>
-                  ) : (
-                    <span style={{ color: '#b2bec3', fontSize: '12px' }}>Procesado</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {solicitudes.map(sol => {
+              const vencido = sol.estado === 'Aprobado' && sol.fechaEntrega && sol.fechaEntrega < hoyStr;
+              return (
+                <tr key={sol.id} style={{ borderBottom: '1px solid #f1f2f6' }}>
+                  <td style={{ padding: '12px', color: '#2d3436', textAlign: 'left' }}>{sol.usuarioEmail}</td>
+                  <td style={{ padding: '12px', fontWeight: 'bold', color: '#0984e3', textAlign: 'left' }}>{sol.objetoNombre} <span style={{fontSize: '11px', color: '#b2bec3', display: 'block'}}>{sol.area}</span></td>
+                  <td style={{ padding: '12px', fontSize: '11px', color: '#636e72', textAlign: 'left' }}>
+                    <div>Préstamo: {sol.fechaPrestamo}</div><div>Devolución: {sol.fechaEntrega}</div>
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'left' }}>
+                     <span style={{ fontWeight: 'bold', color: sol.estado === 'Pendiente' ? '#e1b12c' : sol.estado === 'Aprobado' ? '#00b894' : sol.estado === 'Devuelto' ? '#2d3436' : '#d63031' }}>{sol.estado}</span>
+                     {vencido && <div style={{ color: '#d63031', fontSize: '10px', fontWeight: 'bold', marginTop: '2px' }}>⚠️ RETRASADO</div>}
+                  </td>
+                  <td style={{ padding: '12px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {sol.estado === 'Pendiente' && (
+                      <>
+                        <button onClick={() => cambiarEstadoSolicitud(sol, 'Aprobado')} style={{ background: '#00b894', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px' }}>Aprobar (-1 Stock)</button>
+                        <button onClick={() => cambiarEstadoSolicitud(sol, 'Rechazado')} style={{ background: '#ff7675', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px' }}>Rechazar</button>
+                      </>
+                    )}
+                    {sol.estado === 'Aprobado' && (
+                      <>
+                        <button onClick={() => cambiarEstadoSolicitud(sol, 'Devuelto')} style={{ background: '#0984e3', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px' }}>📥 Registrar Devolución (+1)</button>
+                        <button onClick={() => cambiarEstadoSolicitud(sol, 'Pendiente')} style={{ background: '#dfe6e9', color: '#2d3436', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Revertir</button>
+                      </>
+                    )}
+                    {(sol.estado === 'Devuelto' || sol.estado === 'Rechazado') && (
+                      <button onClick={() => cambiarEstadoSolicitud(sol, 'Pendiente')} style={{ background: '#dfe6e9', color: '#2d3436', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Revertir a Pendiente</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {/* MENÚ DESPLEGABLE 1: CATÁLOGO GENERAL */}
+      <div style={{ border: '1px solid #dfe6e9', borderRadius: '8px', overflow: 'hidden', marginTop: '20px' }}>
+        <button onClick={() => setInventarioMenuAbierto(!inventarioMenuAbierto)} style={cabeceraDesplegableEstilo}>
+          <span>📦 Ver Catálogo General de Inventario (Lista Unificada)</span>
+          <span>{inventarioMenuAbierto ? '▲' : '▼'}</span>
+        </button>
+        {inventarioMenuAbierto && (
+          <div style={{ padding: '15px', backgroundColor: '#ffffff', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {inventario.map(item => (
+              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 15px', border: '1px solid #f1f2f6', borderRadius: '6px', background: '#fff', alignItems: 'center' }}>
+                <span style={{ color: '#2d3436', textAlign: 'left', fontSize: '13px' }}><strong>{item.nombre}</strong> — {item.area} (Stock: <strong>{item.stock} unds</strong>)</span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button onClick={() => prepararEdicion(item)} style={{ background: '#74b9ff', border: 'none', padding: '5px 10px', color: 'white', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold', fontSize: '11px' }}>Editar</button>
+                  <button onClick={() => deleteDoc(doc(db, "inventario", item.id))} style={{ background: '#ff7675', border: 'none', padding: '5px 10px', color: 'white', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold', fontSize: '11px' }}>Eliminar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* MENÚ DESPLEGABLE 2: CATÁLOGO FILTRADO POR CATEGORÍAS */}
+      <div style={{ border: '1px solid #dfe6e9', borderRadius: '8px', overflow: 'hidden', marginTop: '15px' }}>
+        <button onClick={() => setCatPorCategoriaMenuAbierto(!catPorCategoriaMenuAbierto)} style={cabeceraDesplegableEstilo}>
+          <span>🗂️ Ver Catálogo Organizado por Categorías (Carpetas)</span>
+          <span>{catPorCategoriaMenuAbierto ? '▲' : '▼'}</span>
+        </button>
+        {catPorCategoriaMenuAbierto && (
+          <div style={{ padding: '20px', backgroundColor: '#ffffff', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {['Biblioteca', 'Bienestar', 'Laboratorio'].map(areaFiltro => {
+              const itemsFiltrados = inventario.filter(i => i.area === areaFiltro);
+              return (
+                <div key={areaFiltro} style={{ textAlign: 'left' }}>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#2d3436', borderBottom: '1px solid #f1f2f6', paddingBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>📁</span> {areaFiltro} ({itemsFiltrados.length} recursos asignados)
+                  </h4>
+                  {itemsFiltrados.length === 0 ? (
+                    <p style={{ color: '#b2bec3', fontSize: '13px', margin: '5px 0 15px 25px' }}>Sin elementos registrados en esta sección.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '20px' }}>
+                      {itemsFiltrados.map(item => (
+                        <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 15px', border: '1px solid #f1f2f6', borderRadius: '6px', background: '#fafafa', alignItems: 'center' }}>
+                          <span style={{ color: '#2d3436', fontSize: '13px' }}><strong>{item.nombre}</strong> (Stock Real: {item.stock} unds)</span>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button onClick={() => prepararEdicion(item)} style={{ background: '#74b9ff', border: 'none', padding: '4px 8px', color: 'white', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold', fontSize: '11px' }}>Editar</button>
+                            <button onClick={() => deleteDoc(doc(db, "inventario", item.id))} style={{ background: '#ff7675', border: 'none', padding: '4px 8px', color: 'white', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold', fontSize: '11px' }}>Eliminar</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 
-  // Configuración de cabeceras de rol
+  // VISTA 3: EXCLUSIVA CUENTAS (SUPERUSUARIO ENCAPSULADO)
+  const vistaSuperusuarioCuentasDesplegableJSX = (
+    <div style={{ border: '1px solid #dfe6e9', borderRadius: '8px', overflow: 'hidden', marginBottom: '30px' }}>
+      <button onClick={() => setUsuariosMenuAbierto(!usuariosMenuAbierto)} style={{ ...cabeceraDesplegableEstilo, backgroundColor: '#dfe6e9' }}>
+        <span>👥 Configuración Global de Permisos y Cuentas ({usuarios.length} Usuarios)</span>
+        <span>{usuariosMenuAbierto ? '▲' : '▼'}</span>
+      </button>
+      {usuariosMenuAbierto && (
+        <div style={{ padding: '15px', backgroundColor: '#ffffff', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '1px solid #dfe6e9' }}>
+                <th style={{ padding: '12px', textAlign: 'left' }}>ID Firebase</th>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Correo Electrónico</th>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Asignación de Rol</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map(u => (
+                <tr key={u.id} style={{ borderBottom: '1px solid #f1f2f6' }}>
+                  <td style={{ padding: '12px', color: '#b2bec3', fontFamily: 'monospace', fontSize: '11px', textAlign: 'left' }}>{u.id}</td>
+                  <td style={{ padding: '12px', fontWeight: 'bold', color: '#0984e3', textAlign: 'left' }}>{u.correo || u.email}</td>
+                  <td style={{ padding: '12px', textAlign: 'left' }}>
+                    <select value={u.rol || u.role} onChange={(e) => modificarRolUsuario(u.id, e.target.value)} style={{ ...selectEstiloClaro, padding: '8px 10px', fontSize: '12px' }}>
+                      <option value="estudiante">Estudiante</option>
+                      <option value="operador">Operador</option>
+                      <option value="admin">Administrador</option>
+                      <option value="superusuario">Superusuario</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  // CONFIGURACIÓN DINÁMICA POR ROL
   const titulosConfig = {
-    superusuario: { t: "👑 Panel de Super Usuario", c: <VistaGestion tituloRol="Super Usuario" /> },
-    admin: { t: "💼 Panel de Administrador", c: <VistaGestion tituloRol="Administrador" /> },
-    operador: { t: "⚙️ Panel de Operador", c: <VistaGestion tituloRol="Operador" /> },
-    estudiante: { t: "🎓 Panel de Préstamos - Boomerang", c: <VistaEstudiante /> }
+    superusuario: { 
+      t: "👑 Panel Maestro: Superusuario", 
+      c: (
+        <div>
+          {renderPanelEstadisticasJSX()}
+          {vistaSuperusuarioCuentasDesplegableJSX}
+          <div style={{ margin: '30px 0', borderTop: '2px dashed #dfe6e9' }}></div>
+          {vistaGestionJSX}
+        </div>
+      )
+    },
+    admin: { 
+      t: "💼 Panel de Control: Administrador", 
+      c: (
+        <div>
+          {renderPanelEstadisticasJSX()}
+          {vistaGestionJSX}
+        </div>
+      )
+    },
+    operador: { t: "⚙️ Panel de Operaciones: Operador", c: vistaGestionJSX },
+    estudiante: { t: "Préstamos - Boomerang", c: vistaEstudianteJSX }
   };
 
-  const panelActual = titulosConfig[rol];
+  if (loadingAuth) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#f8f9fa', color: '#2d3436', fontSize: '18px', fontWeight: 'bold' }}>Estableciendo conexión segura...</div>;
 
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: '40px 20px', backgroundColor: '#f5f6fa', minHeight: '100vh' }}>
-      {panelActual ? (
-        <div style={{ backgroundColor: '#ffffff', padding: '30px', maxWidth: '850px', margin: '0 auto', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
+    <div style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', width: '100%', fontFamily: "'Segoe UI', Roboto, sans-serif", margin: 0, padding: '40px 20px', boxSizing: 'border-box' }}>
+      {titulosConfig[rol] ? (
+        <div style={{ background: '#ffffff', padding: '35px', maxWidth: '1100px', margin: '0 auto', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
           
-          <div style={{ borderBottom: '2px solid #f0f0f0', paddingBottom: '15px', marginBottom: '20px' }}>
-            <h1 style={{ margin: 0, fontSize: '26px', color: '#2d3436' }}>{panelActual.t}</h1>
-          </div>
-          
-          <div style={{ minHeight: '300px' }}>
-            {panelActual.c}
-          </div>
-
-          <div style={{ borderTop: '2px solid #f0f0f0', paddingTop: '20px', textAlign: 'right', marginTop: '20px' }}>
-            <button onClick={handleCerrarSesion} style={{ backgroundColor: '#ff7675', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
+          {/* Header principal */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #f1f2f6', paddingBottom: '20px', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '32px' }}>🎓</span>
+              <h1 style={{ margin: 0, fontSize: '26px', fontWeight: 'bold', color: '#2d3436' }}>{titulosConfig[rol].t}</h1>
+            </div>
+            <button onClick={handleCerrarSesion} style={{ background: '#ff7675', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}>
               Cerrar Sesión
             </button>
           </div>
 
+          {/* Renderizado del Panel correspondiente */}
+          {titulosConfig[rol].c}
+
         </div>
       ) : (
-        <div style={{ textAlign: 'center', marginTop: '100px', color: '#636e72' }}>
-          <h2>Cargando componentes de Boomerang...</h2>
+        <div style={{ textAlign: 'center', marginTop: '100px' }}>
+          <h2 style={{ color: '#d63031' }}>Rol inválido o sin permisos asignados.</h2>
+          <button onClick={handleCerrarSesion} style={{ marginTop: '15px', padding: '10px 20px', background: '#0984e3', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Regresar al Login</button>
         </div>
       )}
     </div>
