@@ -8,6 +8,7 @@ const Home = () => {
   const [rol, setRol] = useState(null); 
   const [loadingAuth, setLoadingAuth] = useState(true);
   const navigate = useNavigate();
+  const [mostrarPerfil, setMostrarPerfil] = useState(false);
   
   // --- ESTADOS DE DATOS EN TIEMPO REAL ---
   const [inventario, setInventario] = useState([]);
@@ -394,25 +395,85 @@ const Home = () => {
                 </tr>
               </thead>
               <tbody>
-                {solicitudes.filter(s => s.usuarioEmail === auth.currentUser?.email).map(sol => (
-                  <tr key={sol.id} style={{ borderBottom: '1px solid #f1f2f6' }}>
-                    <td style={{ padding: '12px', fontWeight: 'bold', color: '#0984e3', textAlign: 'left' }}>{sol.objetoNombre}</td>
-                    <td style={{ padding: '12px', color: '#636e72', textAlign: 'left' }}>
-                      <div style={{ fontSize: '11px' }}>Préstamo: {sol.fechaPrestamo}</div>
-                      <div style={{ fontSize: '11px' }}>Devolución: {sol.fechaEntrega}</div>
-                    </td>
-                    <td style={{ padding: '12px', textAlign: 'left' }}>
-                      <span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', backgroundColor: sol.estado === 'Pendiente' ? '#fff3cd' : sol.estado === 'Aprobado' ? '#d4edda' : sol.estado === 'Devuelto' ? '#e2e3e5' : '#f8d7da', color: sol.estado === 'Pendiente' ? '#856404' : sol.estado === 'Aprobado' ? '#155724' : sol.estado === 'Devuelto' ? '#383d41' : '#721c24' }}>
-                        {sol.estado}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
-                      {sol.estado === 'Pendiente' ? (
-                        <button onClick={() => cancelarSolicitudEstudiante(sol.id)} style={{ padding: '5px 10px', background: '#ff7675', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Cancelar</button>
-                      ) : <span style={{ color: '#b2bec3', fontSize: '11px' }}>Fijo</span>}
-                    </td>
-                  </tr>
-                ))}
+                {solicitudes.filter(s => s.usuarioEmail === auth.currentUser?.email).map(sol => {
+                  
+                  // 1. LÓGICA DE ESTADO VISUAL
+                  let estadoVisual = sol.estado;
+                  
+                  // Evaluamos la fecha solo si el estado en BD es "Aprobado"
+                  if (sol.estado === 'Aprobado' && sol.fechaEntrega) {
+                    const fechaHoy = new Date();
+                    fechaHoy.setHours(0, 0, 0, 0); 
+                    
+                    const fechaLimite = new Date(sol.fechaEntrega + 'T00:00:00');
+                    fechaLimite.setHours(0, 0, 0, 0);
+
+                    // Si hoy es mayor que la fecha límite, REEMPLAZAMOS el estado visual
+                    if (fechaHoy > fechaLimite) {
+                      estadoVisual = 'Retrasado';
+                    }
+                  }
+
+                  // 2. ASIGNACIÓN DE COLORES
+                  let colorFondo = '';
+                  let colorTexto = '';
+
+                  if (estadoVisual === 'Pendiente') {
+                    colorFondo = '#fff3cd'; 
+                    colorTexto = '#856404';
+                  } else if (estadoVisual === 'Aprobado') {
+                    colorFondo = '#d4edda'; 
+                    colorTexto = '#155724';
+                  } else if (estadoVisual === 'Devuelto') {
+                    colorFondo = '#e2e3e5'; 
+                    colorTexto = '#383d41';
+                  } else {
+                    // Aplica para 'Retrasado' o 'Cancelado/Rechazado'
+                    colorFondo = '#f8d7da'; 
+                    colorTexto = '#721c24';
+                  }
+
+                  // 3. RENDERIZAR LA FILA
+                  return (
+                    <tr key={sol.id} style={{ borderBottom: '1px solid #f1f2f6' }}>
+                      <td style={{ padding: '12px', fontWeight: 'bold', color: '#0984e3', textAlign: 'left' }}>
+                        {sol.objetoNombre}
+                      </td>
+                      <td style={{ padding: '12px', color: '#636e72', textAlign: 'left' }}>
+                        <div style={{ fontSize: '11px' }}>Préstamo: {sol.fechaPrestamo}</div>
+                        <div style={{ fontSize: '11px' }}>Devolución: {sol.fechaEntrega}</div>
+                      </td>
+                      
+                      <td style={{ padding: '12px', textAlign: 'left' }}>
+                        {/* Se muestra una única etiqueta limpia */}
+                        <span style={{ 
+                          padding: '4px 8px', 
+                          borderRadius: '12px', 
+                          fontSize: '11px', 
+                          fontWeight: 'bold', 
+                          backgroundColor: colorFondo, 
+                          color: colorTexto,
+                          display: 'inline-block'
+                        }}>
+                          {estadoVisual === 'Retrasado' ? '⚠️ Retrasado' : estadoVisual}
+                        </span>
+                      </td>
+
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        {sol.estado === 'Pendiente' ? (
+                          <button 
+                            onClick={() => cancelarSolicitudEstudiante(sol.id)} 
+                            style={{ padding: '5px 10px', background: '#ff7675', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                          >
+                            Cancelar
+                          </button>
+                        ) : (
+                          <span style={{ color: '#b2bec3', fontSize: '11px' }}>Fijo</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -643,19 +704,80 @@ const Home = () => {
       {titulosConfig[rol] ? (
         <div style={{ background: '#ffffff', padding: '35px', maxWidth: '1100px', margin: '0 auto', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
           
-          {/* Header principal */}
+     {/* Header principal */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #f1f2f6', paddingBottom: '20px', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <img src={logoIcono} alt="Boomerang Logo" style={{ height: '40px', width: 'auto', objectFit: 'contain' }} />
               <h1 style={{ margin: 0, fontSize: '26px', fontWeight: 'bold', color: '#2d3436' }}>{titulosConfig[rol].t}</h1>
             </div>
-            <button onClick={handleCerrarSesion} style={{ background: '#ff7675', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}>
-              Cerrar Sesión
-            </button>
+            
+            {/* BOTONES DE LA ESQUINA DERECHA - AHORA SOLO EL AVATAR DE PERFIL */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <button 
+                onClick={() => setMostrarPerfil(true)} 
+                style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: '#0984e3', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', transition: 'transform 0.2s' }}
+                title="Ver Perfil"
+              >
+                {auth.currentUser?.email ? auth.currentUser.email.charAt(0).toUpperCase() : 'U'}
+              </button>
+            </div>
           </div>
 
           {/* Renderizado del Panel correspondiente */}
           {titulosConfig[rol].c}
+
+          {/* VENTANA FLOTANTE DE PERFIL - LIMPIA Y DIRECTA */}
+          {mostrarPerfil && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+              <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', position: 'relative', textAlign: 'left' }}>
+                
+                {/* Botón para cerrar (X) */}
+                <button 
+                  onClick={() => setMostrarPerfil(false)} 
+                  style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#636e72' }}
+                >
+                  ✕
+                </button>
+
+                <h3 style={{ margin: '0 0 20px 0', color: '#2d3436', fontSize: '22px', borderBottom: '2px solid #f1f2f6', paddingBottom: '10px' }}>Mi Perfil</h3>
+                
+                {/* Información básica del Usuario */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px', backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '8px' }}>
+                  <div>
+                    <p style={{ margin: '0 0 5px 0', color: '#b2bec3', fontSize: '12px', textTransform: 'uppercase', fontWeight: 'bold' }}>Usuario / Correo</p>
+                    <p style={{ margin: 0, color: '#2d3436', fontSize: '15px', fontWeight: '500' }}>{auth.currentUser?.email}</p>
+                  </div>
+                  
+                  <div>
+                    <p style={{ margin: '0 0 5px 0', color: '#b2bec3', fontSize: '12px', textTransform: 'uppercase', fontWeight: 'bold' }}>Rol en Boomerang</p>
+                    <span style={{ backgroundColor: '#e3f2fd', color: '#0b7dda', padding: '4px 10px', borderRadius: '6px', textTransform: 'uppercase', fontSize: '12px', fontWeight: 'bold', display: 'inline-block' }}>
+                      {rol}
+                    </span>
+                  </div>
+                </div>
+
+                {/* FILA DE BOTONES DE ACCIÓN ABAJO */}
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  {/* Botón para cerrar el perfil */}
+                  <button 
+                    onClick={() => setMostrarPerfil(false)} 
+                    style={{ flex: 1, padding: '12px', backgroundColor: '#dfe6e9', color: '#2d3436', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', transition: 'background-color 0.2s' }}
+                  >
+                    Regresar
+                  </button>
+
+                  {/* Botón para cerrar sesión */}
+                  <button 
+                    onClick={handleCerrarSesion} 
+                    style={{ flex: 1, padding: '12px', backgroundColor: '#ff7675', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', transition: 'background-color 0.2s' }}
+                  >
+                    Cerrar Sesión
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
 
         </div>
       ) : (
